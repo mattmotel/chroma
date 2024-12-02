@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Color Music Grid</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gridCanvas"></canvas>
+
+    <script>
+        // Initialize canvas to fullscreen
+        const canvas = document.getElementById('gridCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        // Resize handler
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            drawGrid();
+        });
+
+        // Audio context and notes setup
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const activeNotes = [];
+        const MAX_NOTES = 4;
+        
+        // Musical scale (C major pentatonic for always-pleasant combinations)
+        const SCALE_NOTES = [
+            261.63, // C4
+            293.66, // D4
+            329.63, // E4
+            392.00, // G4
+            440.00, // A4
+            523.25, // C5
+            587.33, // D5
+            659.25  // E5
+        ];
+
+        // Grid and center point setup
+        const GRID_SIZE = 16;
+        const cellWidth = canvas.width / GRID_SIZE;
+        const cellHeight = canvas.height / GRID_SIZE;
+
+        let centerPoint = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            hue: Math.random() * 360,
+            frequency: SCALE_NOTES[0]
+        };
+
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            const gridX = Math.floor(x / cellWidth);
+            const gridY = Math.floor(y / cellHeight);
+            
+            const distanceFromCenter = Math.sqrt(
+                Math.pow(gridX - GRID_SIZE/2, 2) + 
+                Math.pow(gridY - GRID_SIZE/2, 2)
+            );
+            
+            // Update center color
+            const hueShift = (distanceFromCenter * 30) % 360;
+            centerPoint.hue = (centerPoint.hue + hueShift) % 360;
+            
+            // Choose note from scale based on distance
+            const noteIndex = Math.floor((distanceFromCenter * SCALE_NOTES.length) / 8) % SCALE_NOTES.length;
+            centerPoint.frequency = SCALE_NOTES[noteIndex];
+            
+            // Play new note and manage active notes
+            if (activeNotes.length >= MAX_NOTES) {
+                const oldestNote = activeNotes.shift();
+                oldestNote.gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.5);
+                setTimeout(() => oldestNote.oscillator.stop(), 500);
+            }
+            
+            const noteObj = playNote(centerPoint.frequency);
+            activeNotes.push(noteObj);
+            
+            drawGrid();
+        });
+
+        function playNote(frequency) {
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.type = 'sine';
+            oscillator.frequency.value = frequency;
+            
+            gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.1, audioContext.currentTime + 0.1);
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.start();
+            
+            return { oscillator, gainNode, frequency };
+        }
+
+        function drawGrid() {
+            const centerGridX = Math.floor(GRID_SIZE / 2);
+            const centerGridY = Math.floor(GRID_SIZE / 2);
+
+            for (let x = 0; x < GRID_SIZE; x++) {
+                for (let y = 0; y < GRID_SIZE; y++) {
+                    const pixelX = x * cellWidth;
+                    const pixelY = y * cellHeight;
+                    
+                    const distanceFromCenter = Math.sqrt(
+                        Math.pow(x - centerGridX, 2) + 
+                        Math.pow(y - centerGridY, 2)
+                    );
+                    
+                    const hueShift = (distanceFromCenter * 30) % 360;
+                    const hue = (centerPoint.hue + hueShift) % 360;
+                    
+                    // Enhanced visual feedback for active notes
+                    const saturation = 100;
+                    const lightness = Math.max(60 - distanceFromCenter * 3, 20);
+                    const alpha = 1 - (distanceFromCenter / GRID_SIZE);
+                    
+                    ctx.fillStyle = `hsla(${hue}, ${saturation}%, ${lightness}%, ${alpha})`;
+                    ctx.fillRect(pixelX, pixelY, cellWidth + 1, cellHeight + 1);
+                }
+            }
+        }
+
+        // Initial draw
+        drawGrid();
+    </script>
+</body>
+</html>
