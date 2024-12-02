@@ -108,6 +108,105 @@
             });
         }
 
+        function drawGrid() {
+            const centerGridX = Math.floor(GRID_SIZE / 2);
+            const centerGridY = Math.floor(GRID_SIZE / 2);
+
+            // Draw main grid
+            for (let x = 0; x < GRID_SIZE; x++) {
+                for (let y = 0; y < GRID_SIZE; y++) {
+                    const pixelX = x * cellWidth;
+                    const pixelY = y * cellHeight;
+
+                    const distanceFromCenter = Math.sqrt(
+                        Math.pow(x - centerGridX, 2) +
+                        Math.pow(y - centerGridY, 2)
+                    );
+
+                    const hueShift = (distanceFromCenter * 5) % 360;
+                    const hue = (centerPoint.hue + hueShift) % 360;
+                    const saturation = 100;
+                    const lightness = Math.max(60 - distanceFromCenter * 3, 20);
+                    const alpha = 1 - (distanceFromCenter / GRID_SIZE);
+
+                    ctx.fillStyle = `hsla(${hue}, ${saturation}%, ${lightness}%, ${alpha})`;
+                    ctx.fillRect(pixelX, pixelY, cellWidth + 1, cellHeight + 1);
+                }
+            }
+
+            // Draw color jump zones with improved gradients
+            const jumpZoneSize = 12; // Even bigger gradient area
+
+            // Bottom right corner (jump forward in hue)
+            for (let x = GRID_SIZE - jumpZoneSize; x < GRID_SIZE; x++) {
+                for (let y = GRID_SIZE - jumpZoneSize; y < GRID_SIZE; y++) {
+                    const distFromCorner = Math.sqrt(
+                        Math.pow(GRID_SIZE - x, 2) + 
+                        Math.pow(GRID_SIZE - y, 2)
+                    ) / jumpZoneSize;
+
+                    const blendHue = centerPoint.hue + (90 * (1 - Math.pow(distFromCorner, 2)));
+                    const alpha = 0.3 + (0.6 * (1 - Math.pow(distFromCorner, 2)));
+                    
+                    ctx.fillStyle = `hsla(${blendHue % 360}, 100%, 50%, ${alpha})`;
+                    ctx.fillRect(
+                        x * cellWidth, 
+                        y * cellHeight, 
+                        cellWidth + 1, 
+                        cellHeight + 1
+                    );
+                }
+            }
+
+            // Top left corner (jump backward in hue)
+            for (let x = 0; x < jumpZoneSize; x++) {
+                for (let y = 0; y < jumpZoneSize; y++) {
+                    const distFromCorner = Math.sqrt(
+                        Math.pow(x, 2) + 
+                        Math.pow(y, 2)
+                    ) / jumpZoneSize;
+
+                    const blendHue = centerPoint.hue - (90 * (1 - Math.pow(distFromCorner, 2)));
+                    const alpha = 0.3 + (0.6 * (1 - Math.pow(distFromCorner, 2)));
+                    
+                    ctx.fillStyle = `hsla(${blendHue % 360}, 100%, 50%, ${alpha})`;
+                    ctx.fillRect(
+                        x * cellWidth, 
+                        y * cellHeight, 
+                        cellWidth + 1, 
+                        cellHeight + 1
+                    );
+                }
+            }
+        }
+
+        function playTransitionSound(isForward) {
+            const baseFreq = isForward ? SCALE_NOTES[8] : SCALE_NOTES[2];
+            const duration = 0.5;
+            
+            // Play a quick arpeggio
+            [0, 2, 4].forEach((offset, index) => {
+                setTimeout(() => {
+                    const note = playNote(
+                        SCALE_NOTES[(isForward ? 8 - offset : 2 + offset)],
+                        'sine',
+                        duration,
+                        getMoodFromHue(centerPoint.hue),
+                        70
+                    );
+                    
+                    // Fade out the note
+                    setTimeout(() => {
+                        note.gainNode.gain.exponentialRampToValueAtTime(
+                            0.001,
+                            audioContext.currentTime + 0.3
+                        );
+                    }, duration * 500);
+                    
+                }, index * 100);
+            });
+        }
+
         canvas.addEventListener('click', (e) => {
             const rect = canvas.getBoundingClientRect();
             const x = e.clientX - rect.left;
@@ -116,10 +215,20 @@
             const gridX = Math.floor(x / cellWidth);
             const gridY = Math.floor(y / cellHeight);
 
-            // Check if click is in the "color jump" zone (bottom right corner)
-            if (gridX > GRID_SIZE - 4 && gridY > GRID_SIZE - 4) {
-                // Big color jump (90 degrees) when clicking in bottom right
+            const jumpZoneSize = 12; // Match the drawing size
+
+            // Check if click is in bottom right jump zone
+            if (gridX > GRID_SIZE - jumpZoneSize && gridY > GRID_SIZE - jumpZoneSize) {
                 centerPoint.hue = (centerPoint.hue + 90) % 360;
+                playTransitionSound(true); // Forward arpeggio
+                drawGrid();
+                return;
+            }
+
+            // Check if click is in top left jump zone
+            if (gridX < jumpZoneSize && gridY < jumpZoneSize) {
+                centerPoint.hue = (centerPoint.hue - 90 + 360) % 360;
+                playTransitionSound(false); // Backward arpeggio
                 drawGrid();
                 return;
             }
@@ -186,59 +295,6 @@
             oscillator.start();
 
             return { oscillator, gainNode, frequency };
-        }
-
-        function drawGrid() {
-            const centerGridX = Math.floor(GRID_SIZE / 2);
-            const centerGridY = Math.floor(GRID_SIZE / 2);
-
-            // Draw main grid
-            for (let x = 0; x < GRID_SIZE; x++) {
-                for (let y = 0; y < GRID_SIZE; y++) {
-                    const pixelX = x * cellWidth;
-                    const pixelY = y * cellHeight;
-
-                    const distanceFromCenter = Math.sqrt(
-                        Math.pow(x - centerGridX, 2) +
-                        Math.pow(y - centerGridY, 2)
-                    );
-
-                    const hueShift = (distanceFromCenter * 5) % 360;
-                    const hue = (centerPoint.hue + hueShift) % 360;
-                    const saturation = 100;
-                    const lightness = Math.max(60 - distanceFromCenter * 3, 20);
-                    const alpha = 1 - (distanceFromCenter / GRID_SIZE);
-
-                    ctx.fillStyle = `hsla(${hue}, ${saturation}%, ${lightness}%, ${alpha})`;
-                    ctx.fillRect(pixelX, pixelY, cellWidth + 1, cellHeight + 1);
-                }
-            }
-
-            // Draw color jump zone with gradient
-            const jumpZoneSize = 4;
-            const nextHue = (centerPoint.hue + 90) % 360;
-            
-            for (let x = GRID_SIZE - jumpZoneSize; x < GRID_SIZE; x++) {
-                for (let y = GRID_SIZE - jumpZoneSize; y < GRID_SIZE; y++) {
-                    // Calculate distance from corner
-                    const distFromCorner = Math.sqrt(
-                        Math.pow(GRID_SIZE - x, 2) + 
-                        Math.pow(GRID_SIZE - y, 2)
-                    ) / jumpZoneSize;
-
-                    // Blend between current and next hue
-                    const blendHue = centerPoint.hue + (90 * (1 - distFromCorner));
-                    const alpha = 0.3 + (0.4 * (1 - distFromCorner));
-                    
-                    ctx.fillStyle = `hsla(${blendHue % 360}, 100%, 50%, ${alpha})`;
-                    ctx.fillRect(
-                        x * cellWidth, 
-                        y * cellHeight, 
-                        cellWidth + 1, 
-                        cellHeight + 1
-                    );
-                }
-            }
         }
 
         // Initial draw
