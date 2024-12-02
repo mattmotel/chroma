@@ -52,7 +52,7 @@
         ];
 
         // Grid and center point setup
-        const GRID_SIZE = 32;
+        const GRID_SIZE = 48;
         const cellWidth = canvas.width / GRID_SIZE;
         const cellHeight = canvas.height / GRID_SIZE;
 
@@ -229,25 +229,32 @@
             const gridX = Math.floor(x / cellWidth);
             const gridY = Math.floor(y / cellHeight);
 
-            // Check if click is in ANY of the stop button pixels
+            // Check if click is in ANY of the stop button pixels (2x2 grid)
             if (gridX === 1 && gridY === GRID_SIZE - 2 || // top left pixel
                 gridX === 2 && gridY === GRID_SIZE - 2 || // top right pixel
                 gridX === 1 && gridY === GRID_SIZE - 3 || // bottom left pixel
                 gridX === 2 && gridY === GRID_SIZE - 3) { // bottom right pixel
                 
-                // Stop all active notes
+                // Immediately stop all sounds
                 activeNotes.forEach(note => {
+                    // Stop all oscillators
                     if (note.oscillators) {
                         note.oscillators.forEach(osc => {
                             osc.stop();
                         });
-                    } else if (note.oscillator) {
+                    }
+                    // Stop single oscillator (if exists)
+                    if (note.oscillator) {
                         note.oscillator.stop();
                     }
+                    // Immediately silence the gain node
                     if (note.gainNode) {
                         note.gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+                        note.gainNode.disconnect();
                     }
                 });
+
+                // Clear all active notes
                 activeNotes.length = 0;
                 
                 // Reset center point color
