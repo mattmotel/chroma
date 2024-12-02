@@ -70,27 +70,17 @@
         const MOODS = {
             BLUE: { 
                 min: 180, max: 240, 
-                wave: 'sine',
-                gainMod: 0.4,    
-                attack: 0.1      
+                instrument: 'FLUTE',
+                gainMod: 0.2,    // Softer volume
+                attack: 0.4,     // Slower, gentler attack
+                release: 3.0     // Longer release for more ambient feel
             },     
             GREEN: { 
                 min: 90, max: 150, 
-                wave: 'triangle',
-                gainMod: 0.35,   
-                attack: 0.08     
-            },  
-            YELLOW: { 
-                min: 45, max: 89, 
-                wave: 'triangle',
-                gainMod: 0.3,    
-                attack: 0.05     
-            },   
-            RED: { 
-                min: 0, max: 44, 
-                wave: 'triangle',
-                gainMod: 0.25,   
-                attack: 0.03     
+                instrument: 'CHIME',
+                gainMod: 0.15,   // Even softer
+                attack: 0.3,
+                release: 4.0     // Very long release
             }      
         };
 
@@ -305,33 +295,72 @@
             drawGrid();
         });
 
+        const INSTRUMENTS = {
+            FLUTE: {
+                create: (ctx, frequency) => {
+                    const osc1 = ctx.createOscillator();
+                    const osc2 = ctx.createOscillator();
+                    const gainNode = ctx.createGain();
+                    
+                    osc1.type = 'sine';
+                    osc2.type = 'sine';
+                    osc1.frequency.value = frequency;
+                    osc2.frequency.value = frequency * 2.001; // Very slight detune for warmth
+                    
+                    osc1.connect(gainNode);
+                    osc2.connect(gainNode);
+                    
+                    return { oscillators: [osc1, osc2], gainNode };
+                }
+            },
+            CHIME: {
+                create: (ctx, frequency) => {
+                    const osc = ctx.createOscillator();
+                    const gainNode = ctx.createGain();
+                    
+                    osc.type = 'sine';
+                    osc.frequency.value = frequency;
+                    
+                    osc.connect(gainNode);
+                    
+                    return { oscillators: [osc], gainNode };
+                }
+            }
+        };
+
         function playNote(frequency, waveType, duration, mood, lightness) {
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
+            const instrument = INSTRUMENTS[mood.instrument];
+            const { oscillators, gainNode } = instrument.create(audioContext, frequency);
 
-            oscillator.type = waveType;
-            oscillator.frequency.value = frequency;
+            // Even softer base gain
+            const baseGain = mood.gainMod * (lightness / 100) * 0.3;
 
-            // Adjust base gain for better balance
-            const baseGain = mood.gainMod * (lightness / 100) * 0.5; // Reduced overall volume
-
-            // Smoother attack and release
+            // Gentle attack
             gainNode.gain.setValueAtTime(0, audioContext.currentTime);
             gainNode.gain.exponentialRampToValueAtTime(
                 baseGain, 
                 audioContext.currentTime + mood.attack
             );
 
-            // Add subtle reverb effect
-            const convolver = audioContext.createConvolver();
-            // ... (would need to add impulse response for reverb)
+            // Add reverb-like effect
+            const delay = audioContext.createDelay();
+            const delayGain = audioContext.createGain();
+            delay.delayTime.value = 0.2;
+            delayGain.gain.value = 0.2;
 
-            oscillator.connect(gainNode);
+            gainNode.connect(delay);
+            delay.connect(delayGain);
+            delayGain.connect(audioContext.destination);
             gainNode.connect(audioContext.destination);
 
-            oscillator.start();
+            oscillators.forEach(osc => osc.start());
 
-            return { oscillator, gainNode, frequency };
+            return { 
+                oscillators, 
+                gainNode, 
+                frequency,
+                mood 
+            };
         }
 
         // Initial draw
