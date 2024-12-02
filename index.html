@@ -39,14 +39,20 @@
 
         // Musical scale (C major pentatonic for always-pleasant combinations)
         const SCALE_NOTES = [
-            261.63, // C4
-            293.66, // D4
-            329.63, // E4
-            392.00, // G4
-            440.00, // A4
-            523.25, // C5
-            587.33, // D5
-            659.25  // E5
+            196.00,  // G3
+            220.00,  // A3
+            246.94,  // B3
+            261.63,  // C4
+            293.66,  // D4
+            329.63,  // E4
+            349.23,  // F4
+            392.00,  // G4
+            440.00,  // A4
+            493.88,  // B4
+            523.25,  // C5
+            587.33,  // D5
+            659.25,  // E5
+            698.46   // F5
         ];
 
         // Grid and center point setup
@@ -61,6 +67,24 @@
             frequency: SCALE_NOTES[0]
         };
 
+        // Modify wave types to match "moods"
+        const WAVE_TYPES = ['sine', 'triangle', 'square', 'sawtooth'];
+
+        // Define mood ranges (hue values)
+        const MOODS = {
+            BLUE: { min: 180, max: 240, wave: 'sine' },     // Sad/soft (sine waves)
+            GREEN: { min: 90, max: 150, wave: 'triangle' },  // Natural (triangle waves)
+            YELLOW: { min: 45, max: 89, wave: 'square' },   // Happy/bright (square waves)
+            RED: { min: 0, max: 44, wave: 'sawtooth' }      // Intense (sawtooth waves)
+        };
+
+        function getMoodFromHue(hue) {
+            for (const mood of Object.values(MOODS)) {
+                if (hue >= mood.min && hue <= mood.max) return mood;
+            }
+            return MOODS.BLUE; // default
+        }
+
         canvas.addEventListener('click', (e) => {
             const rect = canvas.getBoundingClientRect();
             const x = e.clientX - rect.left;
@@ -69,46 +93,66 @@
             const gridX = Math.floor(x / cellWidth);
             const gridY = Math.floor(y / cellHeight);
 
+            // Get color at clicked position
             const distanceFromCenter = Math.sqrt(
-                Math.pow(gridX - GRID_SIZE / 2, 2) +
-                Math.pow(gridY - GRID_SIZE / 2, 2)
+                Math.pow(gridX - GRID_SIZE/2, 2) +
+                Math.pow(gridY - GRID_SIZE/2, 2)
             );
 
-            // Update center color
             const hueShift = (distanceFromCenter * 5) % 360;
-            centerPoint.hue = (centerPoint.hue + hueShift) % 360;
+            const hue = (centerPoint.hue + hueShift) % 360;
+            const saturation = 100;
+            const lightness = Math.max(60 - distanceFromCenter * 3, 20);
 
-            // Choose note from scale based on distance
-            const noteIndex = Math.floor((distanceFromCenter * SCALE_NOTES.length) / 8) % SCALE_NOTES.length;
-            centerPoint.frequency = SCALE_NOTES[noteIndex];
+            // Determine musical properties from color
+            const mood = getMoodFromHue(hue);
+            const waveType = mood.wave;
+            
+            // Lightness determines pitch (higher = higher pitch)
+            const noteIndex = Math.floor((lightness / 100) * (SCALE_NOTES.length - 1));
+            const frequency = SCALE_NOTES[noteIndex];
 
-            // Play new note and manage active notes
+            // Saturation affects duration (more saturated = longer note)
+            const noteDuration = 0.1 + (saturation / 100) * 2; // 0.1 to 2.1 seconds
+
+            // Update center point
+            centerPoint.hue = hue;
+            centerPoint.frequency = frequency;
+
+            // Manage active notes (keep up to 4 playing)
             if (activeNotes.length >= MAX_NOTES) {
                 const oldestNote = activeNotes.shift();
                 oldestNote.gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.5);
                 setTimeout(() => oldestNote.oscillator.stop(), 500);
             }
 
-            const noteObj = playNote(centerPoint.frequency);
+            const noteObj = playNote(frequency, waveType, noteDuration);
             activeNotes.push(noteObj);
 
             drawGrid();
         });
 
-        function playNote(frequency) {
+        function playNote(frequency, waveType, duration) {
             const oscillator = audioContext.createOscillator();
             const gainNode = audioContext.createGain();
 
-            oscillator.type = 'sine';
+            oscillator.type = waveType;
             oscillator.frequency.value = frequency;
 
-            gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.1, audioContext.currentTime + 0.1);
+            // Adjust gain based on wave type (softer for sine, louder for sawtooth)
+            const baseGain = waveType === 'sine' ? 0.3 : 
+                            waveType === 'triangle' ? 0.25 :
+                            waveType === 'square' ? 0.15 : 0.1;
+
+            gainNode.gain.setValueAtTime(baseGain, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(baseGain/2, audioContext.currentTime + 0.1);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
 
             oscillator.connect(gainNode);
             gainNode.connect(audioContext.destination);
 
             oscillator.start();
+            setTimeout(() => oscillator.stop(), duration * 1000);
 
             return { oscillator, gainNode, frequency };
         }
