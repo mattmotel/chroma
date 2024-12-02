@@ -37,22 +37,18 @@
         const activeNotes = [];
         const MAX_NOTES = 4;
 
-        // Musical scale (C major pentatonic for always-pleasant combinations)
+        // Musical scale (pentatonic scale)
         const SCALE_NOTES = [
-            196.00,  // G3
-            220.00,  // A3
-            246.94,  // B3
             261.63,  // C4
             293.66,  // D4
             329.63,  // E4
-            349.23,  // F4
             392.00,  // G4
             440.00,  // A4
-            493.88,  // B4
             523.25,  // C5
             587.33,  // D5
             659.25,  // E5
-            698.46   // F5
+            783.99,  // G5
+            880.00   // A5
         ];
 
         // Grid and center point setup
@@ -70,12 +66,32 @@
         // Modify wave types to match "moods"
         const WAVE_TYPES = ['sine', 'triangle', 'square', 'sawtooth'];
 
-        // Define mood ranges (hue values)
+        // Enhanced mood definitions with more musical properties
         const MOODS = {
-            BLUE: { min: 180, max: 240, wave: 'sine' },     // Sad/soft (sine waves)
-            GREEN: { min: 90, max: 150, wave: 'triangle' },  // Natural (triangle waves)
-            YELLOW: { min: 45, max: 89, wave: 'square' },   // Happy/bright (square waves)
-            RED: { min: 0, max: 44, wave: 'sawtooth' }      // Intense (sawtooth waves)
+            BLUE: { 
+                min: 180, max: 240, 
+                wave: 'sine',
+                gainMod: 0.4,    
+                attack: 0.1      
+            },     
+            GREEN: { 
+                min: 90, max: 150, 
+                wave: 'triangle',
+                gainMod: 0.35,   
+                attack: 0.08     
+            },  
+            YELLOW: { 
+                min: 45, max: 89, 
+                wave: 'triangle',
+                gainMod: 0.3,    
+                attack: 0.05     
+            },   
+            RED: { 
+                min: 0, max: 44, 
+                wave: 'triangle',
+                gainMod: 0.25,   
+                attack: 0.03     
+            }      
         };
 
         function getMoodFromHue(hue) {
@@ -83,6 +99,13 @@
                 if (hue >= mood.min && hue <= mood.max) return mood;
             }
             return MOODS.BLUE; // default
+        }
+
+        // Helper function to get nearest note in scale
+        function getNearestNote(desiredFreq) {
+            return SCALE_NOTES.reduce((prev, curr) => {
+                return (Math.abs(curr - desiredFreq) < Math.abs(prev - desiredFreq) ? curr : prev);
+            });
         }
 
         canvas.addEventListener('click', (e) => {
@@ -93,63 +116,69 @@
             const gridX = Math.floor(x / cellWidth);
             const gridY = Math.floor(y / cellHeight);
 
-            // Get color at clicked position
-            const distanceFromCenter = Math.sqrt(
-                Math.pow(gridX - GRID_SIZE/2, 2) +
-                Math.pow(gridY - GRID_SIZE/2, 2)
-            );
+            // Check if click is in the "color jump" zone (bottom right corner)
+            if (gridX > GRID_SIZE - 4 && gridY > GRID_SIZE - 4) {
+                // Big color jump (90 degrees) when clicking in bottom right
+                centerPoint.hue = (centerPoint.hue + 90) % 360;
+                drawGrid();
+                return;
+            }
 
-            const hueShift = (distanceFromCenter * 5) % 360;
-            const hue = (centerPoint.hue + hueShift) % 360;
-            const saturation = 100;
-            const lightness = Math.max(60 - distanceFromCenter * 3, 20);
+            // Get base note from Y position (top = higher, bottom = lower)
+            const yPos = 1 - (gridY / GRID_SIZE); // 0 to 1, inverted
+            const noteIndex = Math.floor(yPos * (SCALE_NOTES.length - 1));
+            let frequency = SCALE_NOTES[noteIndex];
 
-            // Determine musical properties from color
-            const mood = getMoodFromHue(hue);
+            // Adjust frequency slightly based on color
+            const hueInfluence = (centerPoint.hue / 360) * 20; // Small variation based on hue
+            frequency = getNearestNote(frequency + hueInfluence);
+
+            // Enhanced musical properties from color
+            const mood = getMoodFromHue(centerPoint.hue);
             const waveType = mood.wave;
             
-            // Lightness determines pitch (higher = higher pitch)
-            const noteIndex = Math.floor((lightness / 100) * (SCALE_NOTES.length - 1));
-            const frequency = SCALE_NOTES[noteIndex];
+            // Lightness affects both pitch and volume
+            const lightness = Math.max(60 - gridY * 3, 20);
 
-            // Saturation affects duration (more saturated = longer note)
-            const noteDuration = 0.1 + (saturation / 100) * 2; // 0.1 to 2.1 seconds
+            // Saturation affects note length and tremolo
+            const noteDuration = 0.1 + (100 / 100) * 2;
 
             // Update center point
-            centerPoint.hue = hue;
+            centerPoint.hue = centerPoint.hue;
             centerPoint.frequency = frequency;
 
-            // Manage active notes (keep up to 4 playing)
             if (activeNotes.length >= MAX_NOTES) {
                 const oldestNote = activeNotes.shift();
                 oldestNote.gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.5);
                 setTimeout(() => oldestNote.oscillator.stop(), 500);
             }
 
-            const noteObj = playNote(frequency, waveType, noteDuration);
+            const noteObj = playNote(frequency, waveType, noteDuration, mood, lightness);
             activeNotes.push(noteObj);
 
             drawGrid();
         });
 
-        function playNote(frequency, waveType, duration) {
+        function playNote(frequency, waveType, duration, mood, lightness) {
             const oscillator = audioContext.createOscillator();
             const gainNode = audioContext.createGain();
 
             oscillator.type = waveType;
             oscillator.frequency.value = frequency;
 
-            // Adjust gain based on wave type
-            const baseGain = waveType === 'sine' ? 0.3 : 
-                            waveType === 'triangle' ? 0.25 :
-                            waveType === 'square' ? 0.15 : 0.1;
+            // Adjust base gain for better balance
+            const baseGain = mood.gainMod * (lightness / 100) * 0.5; // Reduced overall volume
 
-            // Initial attack
-            gainNode.gain.setValueAtTime(baseGain, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(baseGain/2, audioContext.currentTime + 0.1);
-            
-            // Remove the automatic fade out - let the note sustain
-            gainNode.gain.exponentialRampToValueAtTime(baseGain/3, audioContext.currentTime + 0.2);
+            // Smoother attack and release
+            gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(
+                baseGain, 
+                audioContext.currentTime + mood.attack
+            );
+
+            // Add subtle reverb effect
+            const convolver = audioContext.createConvolver();
+            // ... (would need to add impulse response for reverb)
 
             oscillator.connect(gainNode);
             gainNode.connect(audioContext.destination);
@@ -183,6 +212,19 @@
 
                     ctx.fillStyle = `hsla(${hue}, ${saturation}%, ${lightness}%, ${alpha})`;
                     ctx.fillRect(pixelX, pixelY, cellWidth + 1, cellHeight + 1);
+                }
+            }
+
+            // Draw color jump zone indicator
+            ctx.fillStyle = `hsla(${(centerPoint.hue + 90) % 360}, 100%, 50%, 0.3)`;
+            for (let x = GRID_SIZE - 4; x < GRID_SIZE; x++) {
+                for (let y = GRID_SIZE - 4; y < GRID_SIZE; y++) {
+                    ctx.fillRect(
+                        x * cellWidth, 
+                        y * cellHeight, 
+                        cellWidth + 1, 
+                        cellHeight + 1
+                    );
                 }
             }
         }
