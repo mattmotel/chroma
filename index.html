@@ -134,10 +134,10 @@
                 }
             }
 
-            // Draw color jump zones with improved gradients
-            const jumpZoneSize = 12; // Even bigger gradient area
+            // Draw color jump zones
+            const jumpZoneSize = 12;
 
-            // Bottom right corner (jump forward in hue)
+            // Bottom right corner
             for (let x = GRID_SIZE - jumpZoneSize; x < GRID_SIZE; x++) {
                 for (let y = GRID_SIZE - jumpZoneSize; y < GRID_SIZE; y++) {
                     const distFromCorner = Math.sqrt(
@@ -145,8 +145,8 @@
                         Math.pow(GRID_SIZE - y, 2)
                     ) / jumpZoneSize;
 
-                    const blendHue = centerPoint.hue + (90 * (1 - Math.pow(distFromCorner, 2)));
-                    const alpha = 0.3 + (0.6 * (1 - Math.pow(distFromCorner, 2)));
+                    const blendHue = centerPoint.hue + 90;
+                    const alpha = 0.3 + (0.4 * (1 - distFromCorner));
                     
                     ctx.fillStyle = `hsla(${blendHue % 360}, 100%, 50%, ${alpha})`;
                     ctx.fillRect(
@@ -158,7 +158,7 @@
                 }
             }
 
-            // Top left corner (jump backward in hue)
+            // Top left corner
             for (let x = 0; x < jumpZoneSize; x++) {
                 for (let y = 0; y < jumpZoneSize; y++) {
                     const distFromCorner = Math.sqrt(
@@ -166,8 +166,8 @@
                         Math.pow(y, 2)
                     ) / jumpZoneSize;
 
-                    const blendHue = centerPoint.hue - (90 * (1 - Math.pow(distFromCorner, 2)));
-                    const alpha = 0.3 + (0.6 * (1 - Math.pow(distFromCorner, 2)));
+                    const blendHue = centerPoint.hue - 90;
+                    const alpha = 0.3 + (0.4 * (1 - distFromCorner));
                     
                     ctx.fillStyle = `hsla(${blendHue % 360}, 100%, 50%, ${alpha})`;
                     ctx.fillRect(
@@ -179,7 +179,7 @@
                 }
             }
 
-            // Draw stop/reset button in bottom left (1 pixel up from bottom)
+            // Draw stop button
             const stopSize = 2;
             ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
             ctx.fillRect(
