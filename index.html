@@ -70,17 +70,31 @@
         const MOODS = {
             BLUE: { 
                 min: 180, max: 240, 
-                instrument: 'FLUTE',
-                gainMod: 0.2,    // Softer volume
-                attack: 0.4,     // Slower, gentler attack
-                release: 3.0     // Longer release for more ambient feel
+                instrument: 'FLUTE',    // Soft, breathy
+                gainMod: 0.2,    
+                attack: 0.4,     
+                release: 3.0     
             },     
             GREEN: { 
                 min: 90, max: 150, 
-                instrument: 'CHIME',
-                gainMod: 0.15,   // Even softer
-                attack: 0.3,
-                release: 4.0     // Very long release
+                instrument: 'CRYSTAL',  // Bright, sparkly
+                gainMod: 0.15,   
+                attack: 0.1,
+                release: 4.0     
+            },
+            YELLOW: { 
+                min: 45, max: 89, 
+                instrument: 'CHIME',    // Bell-like
+                gainMod: 0.12,    
+                attack: 0.05,
+                release: 3.0
+            },
+            RED: { 
+                min: 0, max: 44, 
+                instrument: 'PAD',      // Warm, atmospheric
+                gainMod: 0.15,   
+                attack: 0.4,
+                release: 2.5
             }      
         };
 
@@ -305,26 +319,80 @@
                     osc1.type = 'sine';
                     osc2.type = 'sine';
                     osc1.frequency.value = frequency;
-                    osc2.frequency.value = frequency * 2.001; // Very slight detune for warmth
+                    osc2.frequency.value = frequency * 2.001; // Slight detune for warmth
                     
                     osc1.connect(gainNode);
                     osc2.connect(gainNode);
                     
                     return { oscillators: [osc1, osc2], gainNode };
-                }
+                },
+                gainMod: 0.2,
+                attack: 0.3,
+                release: 2.0
             },
             CHIME: {
                 create: (ctx, frequency) => {
-                    const osc = ctx.createOscillator();
+                    const osc1 = ctx.createOscillator();
+                    const osc2 = ctx.createOscillator();
                     const gainNode = ctx.createGain();
                     
-                    osc.type = 'sine';
-                    osc.frequency.value = frequency;
+                    osc1.type = 'sine';
+                    osc2.type = 'sine';
+                    osc1.frequency.value = frequency;
+                    osc2.frequency.value = frequency * 3; // Third harmonic for bell-like sound
                     
-                    osc.connect(gainNode);
+                    osc1.connect(gainNode);
+                    osc2.connect(gainNode);
                     
-                    return { oscillators: [osc], gainNode };
-                }
+                    return { oscillators: [osc1, osc2], gainNode };
+                },
+                gainMod: 0.15,
+                attack: 0.05,  // Quick attack for chime sound
+                release: 3.0
+            },
+            CRYSTAL: {
+                create: (ctx, frequency) => {
+                    const osc1 = ctx.createOscillator();
+                    const osc2 = ctx.createOscillator();
+                    const osc3 = ctx.createOscillator();
+                    const gainNode = ctx.createGain();
+                    
+                    osc1.type = 'triangle';
+                    osc2.type = 'sine';
+                    osc3.type = 'sine';
+                    osc1.frequency.value = frequency;
+                    osc2.frequency.value = frequency * 2;
+                    osc3.frequency.value = frequency * 4;
+                    
+                    osc1.connect(gainNode);
+                    osc2.connect(gainNode);
+                    osc3.connect(gainNode);
+                    
+                    return { oscillators: [osc1, osc2, osc3], gainNode };
+                },
+                gainMod: 0.1,
+                attack: 0.1,
+                release: 4.0
+            },
+            PAD: {
+                create: (ctx, frequency) => {
+                    const oscs = [];
+                    const gainNode = ctx.createGain();
+                    
+                    // Create 3 slightly detuned oscillators
+                    for(let i = 0; i < 3; i++) {
+                        const osc = ctx.createOscillator();
+                        osc.type = 'sine';
+                        osc.frequency.value = frequency * (1 + (i - 1) * 0.002);
+                        osc.connect(gainNode);
+                        oscs.push(osc);
+                    }
+                    
+                    return { oscillators: oscs, gainNode };
+                },
+                gainMod: 0.15,
+                attack: 0.4,
+                release: 3.0
             }
         };
 
@@ -332,21 +400,20 @@
             const instrument = INSTRUMENTS[mood.instrument];
             const { oscillators, gainNode } = instrument.create(audioContext, frequency);
 
-            // Even softer base gain
-            const baseGain = mood.gainMod * (lightness / 100) * 0.3;
+            const baseGain = instrument.gainMod * (lightness / 100) * 0.3;
 
             // Gentle attack
             gainNode.gain.setValueAtTime(0, audioContext.currentTime);
             gainNode.gain.exponentialRampToValueAtTime(
                 baseGain, 
-                audioContext.currentTime + mood.attack
+                audioContext.currentTime + instrument.attack
             );
 
-            // Add reverb-like effect
+            // Add reverb/delay effect
             const delay = audioContext.createDelay();
             const delayGain = audioContext.createGain();
             delay.delayTime.value = 0.2;
-            delayGain.gain.value = 0.2;
+            delayGain.gain.value = 0.15;
 
             gainNode.connect(delay);
             delay.connect(delayGain);
@@ -355,12 +422,7 @@
 
             oscillators.forEach(osc => osc.start());
 
-            return { 
-                oscillators, 
-                gainNode, 
-                frequency,
-                mood 
-            };
+            return { oscillators, gainNode, frequency, mood: instrument };
         }
 
         // Initial draw
